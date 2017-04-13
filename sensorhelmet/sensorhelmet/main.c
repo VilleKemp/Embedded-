@@ -52,10 +52,10 @@ SPCR0 |= (1<<SPE0)|(1<<MSTR0);// SPI enable ja set master
  /*Set baud rate */
  UBRR0H = (unsigned char)(MYUBRR>>8);
  UBRR0L = (unsigned char)MYUBRR;
-  /* Enable receiver and transmitter  & Interrupts for RX & TX*/
-  UCSR0B = (1<<RXEN0) | (1<<TXEN0) | (1<<RXCIE0) | (1<< TXCIE0);
+  /* Enable receiver and transmitter */
+  UCSR0B = (1<<RXEN0) | (1<<TXEN0) ;
   /* Set frame format: 8data, 1stop bit */
-  UCSR0C = (1<<UCSZ00) | (1<<UCSZ01);
+  UCSR0C = (1<<UCSZ00) | (1<<UCSZ01)| (0<<UMSEL00) | (0<<UMSEL01);	
 
 
 }
@@ -131,6 +131,10 @@ void bluetooth_transmit(uint8_t data){
  blink();
  UDR0 = data;blink();
 
+
+
+		
+
 }
 /*
 ISR(USART_RX_vect) //Receive complete
@@ -152,15 +156,27 @@ int main(void)
 sei();
 init();
 uint8_t data = 111;
+unsigned char ReceivedByte;
     while (1) 
     {
 		
 	//	readSensors();
 	
 	//led();
-	bluetooth_transmit(data);
+//	bluetooth_transmit(data);
 	
-	blink();
+//	blink();
+while ((UCSR0A & (1 << RXC0)) == 0) {
+	
+}; // Do nothing until data have been received and is ready to be read from UDR
+
+ReceivedByte = UDR0; // Fetch the received byte value into the variable "ByteReceived"
+
+/* Wait for empty transmit buffer */
+while ( !( UCSR0A & (1<<UDRE0)) )
+;
+/* Put data into buffer, sends the data */
+UDR0 = ReceivedByte;
     }
 }
 

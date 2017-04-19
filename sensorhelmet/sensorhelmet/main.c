@@ -120,19 +120,18 @@ void blink(){
 	
 }
 
-void bluetooth_transmit(uint8_t data){
+void bluetooth_transmit(char data){
 
- /* Wait for empty transmit buffer */
- while ( !( UCSR0A & (1<<UDRE0)) )
- ;
- /* Put data into buffer, sends the data */
- blink();
- UDR0 = data;blink();
+	while ((UCSR0A & (1 << UDRE0)) == 0) {}; // Do nothing until UDR is ready for more data to be written to it
+		UDR0 = data; // Echo back the received byte back to the computer	
 
+}
 
-
-		
-
+char bluetooth_receive(){
+	char ReceivedByte;
+	while ((UCSR0A & (1 << RXC0)) == 0) {}; // Do nothing until data have been recieved and is ready to be read from UDR
+		ReceivedByte = UDR0; // Fetch the recieved byte value into the variable "ByteReceived"
+	return ReceivedByte;
 }
 /*
 ISR(USART_RX_vect) //Receive complete
@@ -149,19 +148,19 @@ ISR(USART_TX_vect) //Transmit complete
 	data = 0;
 }
 */
+
+
 int main(void)
 {
 sei();
 init();
-uint8_t data = 111;
+
 char ReceivedByte;
     while (1) 
     {
-		while ((UCSR0A & (1 << RXC0)) == 0) {}; // Do nothing until data have been recieved and is ready to be read from UDR
-		ReceivedByte = UDR0; // Fetch the recieved byte value into the variable "ByteReceived"
-
-		while ((UCSR0A & (1 << UDRE0)) == 0) {}; // Do nothing until UDR is ready for more data to be written to it
-		UDR0 = ReceivedByte; // Echo back the received byte back to the computer	
+ReceivedByte = bluetooth_receive();
+bluetooth_transmit(ReceivedByte);
+		
     }
 }
 

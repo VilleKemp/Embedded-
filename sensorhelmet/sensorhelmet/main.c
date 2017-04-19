@@ -4,13 +4,13 @@
  * Created: 2.3.2017 9:28:23
  * Author : Group4
  */ 
+#define F_CPU 8000000 // Clock Speed
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
 
-#define F_CPU 1000000 // Clock Speed
-#define BAUD 9600
-#define MYUBRR F_CPU/16/BAUD-1
+#define USART_BAUDRATE 9600
+#define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
 
 
 #define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
@@ -49,13 +49,11 @@ SPCR0 |= (1<<SPE0)|(1<<MSTR0);// SPI enable ja set master
 
 
 //USART
- /*Set baud rate */
- UBRR0H = (unsigned char)(MYUBRR>>8);
- UBRR0L = (unsigned char)MYUBRR;
-  /* Enable receiver and transmitter */
-  UCSR0B = (1<<RXEN0) | (1<<TXEN0) ;
-  /* Set frame format: 8data, 1stop bit */
-  UCSR0C = (1<<UCSZ00) | (1<<UCSZ01)| (0<<UMSEL00) | (0<<UMSEL01);	
+UCSR0B |= (1 << RXEN0) | (1 << TXEN0);   // Turn on the transmission and reception circuitry
+UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01) | (0<<UMSEL00) | (0<<UMSEL01); // Use 8-bit character sizes
+
+UBRR0L = BAUD_PRESCALE; // Load lower 8-bits of the baud rate value into the low byte of the UBRR register
+UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR registerOSCCAL = 0xC1;
 
 
 }
@@ -156,27 +154,14 @@ int main(void)
 sei();
 init();
 uint8_t data = 111;
-unsigned char ReceivedByte;
+char ReceivedByte;
     while (1) 
     {
-		
-	//	readSensors();
-	
-	//led();
-//	bluetooth_transmit(data);
-	
-//	blink();
-while ((UCSR0A & (1 << RXC0)) == 0) {
-	
-}; // Do nothing until data have been received and is ready to be read from UDR
+		while ((UCSR0A & (1 << RXC0)) == 0) {}; // Do nothing until data have been recieved and is ready to be read from UDR
+		ReceivedByte = UDR0; // Fetch the recieved byte value into the variable "ByteReceived"
 
-ReceivedByte = UDR0; // Fetch the received byte value into the variable "ByteReceived"
-
-/* Wait for empty transmit buffer */
-while ( !( UCSR0A & (1<<UDRE0)) )
-;
-/* Put data into buffer, sends the data */
-UDR0 = ReceivedByte;
+		while ((UCSR0A & (1 << UDRE0)) == 0) {}; // Do nothing until UDR is ready for more data to be written to it
+		UDR0 = ReceivedByte; // Echo back the received byte back to the computer	
     }
 }
 

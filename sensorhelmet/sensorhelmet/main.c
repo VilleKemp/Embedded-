@@ -53,9 +53,13 @@ UCSR0B |= (1 << RXEN0) | (1 << TXEN0);   // Turn on the transmission and recepti
 UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01) | (0<<UMSEL00) | (0<<UMSEL01); // Use 8-bit character sizes
 
 UBRR0L = BAUD_PRESCALE; // Load lower 8-bits of the baud rate value into the low byte of the UBRR register
-UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR registerOSCCAL = 0xC1;
+UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR register
+//Oscilator calibration for 8MHz
+OSCCAL = 0xC1;
 
-
+//Enable button interrupts
+PCMSK3 = 0b00000100;
+PCICR = 0b00001000;
 }
 
 
@@ -96,25 +100,37 @@ void send_to_eeprom(char data){
 	
 //}
 
- void led_on(){
+ void blue_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND4); // Pin 4 goes low
 	PORTD |= (1 << PIND6); // Pin 6 goes high	 
-
  }
  void led_off(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND4); // Pin 4 goes low
-	PORTD &= ~(1 << PIND6); // Pin 6 goes low
-	 
-
+	PORTD &= ~(1 << PIND6); // Pin 6 goes low	 
  }
+ 
+  void green_led_on(){
+	 
+	PORTD &= ~(1 << PIND5); // Pin 5 goes low
+	PORTD &= ~(1 << PIND6); // Pin 6 goes low
+	PORTD |= (1 << PIND4); // Pin 4 goes high	 
+ }
+ 
+   void red_led_on(){
+	 
+	PORTD &= ~(1 << PIND4); // Pin 4 goes low
+	PORTD &= ~(1 << PIND6); // Pin 6 goes low
+	PORTD |= (1 << PIND5); // Pin 5 goes high	 
+ }
+
 
 void blink(){
 		_delay_ms(500);
-	led_on();
+	blue_led_on();
 	_delay_ms(500);
 	led_off();
 	
@@ -148,6 +164,11 @@ ISR(USART_TX_vect) //Transmit complete
 	data = 0;
 }
 */
+ISR(PCINT3_vect){
+blink();
+blink();
+blink();
+}
 
 
 int main(void)

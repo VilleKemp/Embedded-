@@ -24,6 +24,10 @@
 char high;
 char low;
 
+//Interrupt flag
+static volatile uint8_t newIntFlag = 0;
+
+
 void init(){
 
 //Input/ouput asetus 0=input 1=output
@@ -163,17 +167,16 @@ char bluetooth_receive(){
 
 /*Interrupts*/
 //Sync button interrupt
-ISR(PCINT3_vect){
-blink();
-blink();
-blink();
+ISR(PCINT3_vect)
+{
+	newIntFlag = 1;
 }
 
 
 int main(void)
 {
-sei();
 init();
+sei();
 
 char ReceivedByte;
 uint16_t result;
@@ -189,8 +192,12 @@ char *adc_results;
 		_delay_ms(1000);
 		}
 		
-		blink();
-		
+		//blink();
+		if (newIntFlag)
+		{
+			blink();
+			newIntFlag = 0;
+		}		
 /*test code for 
 ReceivedByte = bluetooth_receive();
 bluetooth_transmit(ReceivedByte);

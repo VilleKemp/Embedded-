@@ -20,8 +20,9 @@
 #define READ 0b00000011
 #define BAUDRATE 9600
 
-uint16_t adc_result[channels];
-
+//uint16_t adc_result[channels]; //pointless. remove later
+char high;
+char low;
 
 void init(){
 
@@ -40,7 +41,7 @@ MCUCR = (0<<JTD)|(1<<PUD); //JTAG enable ja pull-up enable. kaksi kertaa koska j
 MCUCR = (0<<JTD)|(1<<PUD);
 //ADC
 //ADMUX biteillä 0-4 valitaan mistä ADC pinnistä luetaan tietoa
-ADMUX |=(0<<REFS0) | (0<<REFS1) | (0<<ADLAR);// aseta AREF referenssi jänniteeksi ja älä left adjusti
+ADMUX |=(1<<REFS0) | (1<<ADLAR);// aseta AREF referenssi jänniteeksi ja älä left adjusti
 ADCSRA |=(1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); //enable adc ja prescaler asetettu 128. Taajuuden pitää olla välillä 50k-200k. 128 arvo on 156k 20MHz MCU taajuudella
 
 
@@ -63,9 +64,12 @@ PCICR = 0b00001000;
 }
 
 
-void readSensors(){
-	int channel;
-
+char * read_sensors(){
+	int channel=0;
+	int position;
+	position=0;
+	        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
+	static	char results[channels*2];//holds values for one loop of read_sensors()
 	for(channel=0;channel<channels;channel++)
     {
         // This is the code that selects the channel. AND out the entire mux area,
@@ -78,28 +82,35 @@ void readSensors(){
 
         // Wait for the result, then read it.
         while(ADCSRA & (1<<ADSC));
-        adc_result[channel] =ADC;
+        //adc_result[channel] =ADC;
+		//high=ADCH;
+		//low=ADCL;
+		results[position]=ADCH;
+		results[position+1]=ADCL;
+		position=position+2;
 		
 }
+        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
+return results;
 }
-/*
+
 void send_to_eeprom(char data){
-	int i=0;
-	/*synchronization?????
+	
+	/*synchronization?????*/
 	SPDR0 = data; 
-	while(!(SPSR0 & (1<<SPIF))){ 
+	while(!(SPSR0 & (1<<SPIF0))){ 
 		;
 	}
 	
-	PINB4=0;//chip select low
-		
-	// /* Start transmission */
-	 //SPDR0 = data;
-	// /* Wait for transmission complete */
-	 //while(!(SPSR0 & (1<<SPIF0))){;}	//PINB4=1; 	 //chip select high
+	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
 	
-//}
+	 /* Start transmission */
+	 SPDR0 = data;
+	 /* Wait for transmission complete */
+	 while(!(SPSR0 & (1<<SPIF0))){;}	 PORTB |= (1 << PINB); // Pin  goes high Chip select	
+}
 
+/*Led functions*/
  void blue_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
@@ -135,7 +146,7 @@ void blink(){
 	led_off();
 	
 }
-
+/*Bluetooth funtions*/
 void bluetooth_transmit(char data){
 
 	while ((UCSR0A & (1 << UDRE0)) == 0) {}; // Do nothing until UDR is ready for more data to be written to it
@@ -149,21 +160,9 @@ char bluetooth_receive(){
 		ReceivedByte = UDR0; // Fetch the recieved byte value into the variable "ByteReceived"
 	return ReceivedByte;
 }
-/*
-ISR(USART_RX_vect) //Receive complete
-{
-	data = UDR0;
-	UDR0 = (data);
-	led_on();
-	_delay_ms(500);
-	led_off();
-}
 
-ISR(USART_TX_vect) //Transmit complete
-{
-	data = 0;
-}
-*/
+/*Interrupts*/
+//Sync button interrupt
 ISR(PCINT3_vect){
 blink();
 blink();
@@ -177,11 +176,42 @@ sei();
 init();
 
 char ReceivedByte;
+uint16_t result;
+char *adc_results;
+
     while (1) 
     {
+		//read sensor result
+		adc_results=read_sensors();
+		for(int i=0;i<channels*2;i=i+2){
+		bluetooth_transmit(*(adc_results+i));
+		bluetooth_transmit(*(adc_results+i+1));
+		_delay_ms(1000);
+		}
+		
+		blink();
+		
+/*test code for 
 ReceivedByte = bluetooth_receive();
 bluetooth_transmit(ReceivedByte);
-		
+	*/
+/*test code for adc
+        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));//all muxes to 0
+        //ADMUX |= (1<<MUX0);//choose first?
+
+        // Start the conversion.
+        ADCSRA |= (1<<ADSC);
+
+        // Wait for the result, then read it.
+        while(ADCSRA & (1<<ADSC));
+        result =ADC;
+		high=ADCH;
+		low=ADCL;
+		bluetooth_transmit(low);
+		bluetooth_transmit(high);
+		//bluetooth_transmit(result);
+		_delay_ms(1000);
+		result=0;*/
     }
 }
 

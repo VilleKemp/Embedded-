@@ -13,7 +13,7 @@
 #define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
 
 
-#define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
+#define channels 1 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
 //define eeprom instructions
 #define WREN 0b00000110
 #define WRITE 0b00000010
@@ -67,6 +67,24 @@ PCMSK3 = 0b00000100;
 PCICR = 0b00001000;
 }
 
+char * read_sensor(int channel){
+		static char result[2];
+        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
+        ADMUX |= channel;
+
+        // Start the conversion.
+        ADCSRA |= (1<<ADSC);
+
+        // Wait for the result, then read it.
+        while(ADCSRA & (1<<ADSC));
+        //adc_result[channel] =ADC;
+        //high=ADCH;
+        //low=ADCL;
+        result[0]=ADCH;
+        result[1]=ADCL;	
+	
+		return result;
+}
 
 char * read_sensors(){
 	int channel=0;
@@ -153,7 +171,11 @@ void blink(){
 /*Bluetooth funtions*/
 void bluetooth_transmit(char data){
 
-	while ((UCSR0A & (1 << UDRE0)) == 0) {}; // Do nothing until UDR is ready for more data to be written to it
+	while ((UCSR0A & (1 << UDRE0)) == 0) {
+		
+		}; // Do nothing until UDR is ready for more data to be written to it
+		
+		
 		UDR0 = data; // Echo back the received byte back to the computer	
 
 }
@@ -181,18 +203,19 @@ sei();
 char ReceivedByte;
 uint16_t result;
 char *adc_results;
-
+int channel;
     while (1) 
     {
-		//read sensor result
+		/*
 		adc_results=read_sensors();
 		for(int i=0;i<channels*2;i=i+2){
 		bluetooth_transmit(*(adc_results+i));
 		bluetooth_transmit(*(adc_results+i+1));
 		_delay_ms(1000);
 		}
+		*/
 		
-		//blink();
+		
 		if (newIntFlag)
 		{
 			blink();
@@ -202,23 +225,31 @@ char *adc_results;
 ReceivedByte = bluetooth_receive();
 bluetooth_transmit(ReceivedByte);
 	*/
-/*test code for adc
+//test code for adc
+		for(channel=0;channel<channels;channel++){
         ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));//all muxes to 0
-        //ADMUX |= (1<<MUX0);//choose first?
-
-        // Start the conversion.
+        ADMUX |= channel;
+	  // Start the conversion.
         ADCSRA |= (1<<ADSC);
 
         // Wait for the result, then read it.
-        while(ADCSRA & (1<<ADSC));
-        result =ADC;
-		high=ADCH;
+
+        
+		while(ADCSRA & (1<<ADSC));
+       // result =ADC;
 		low=ADCL;
-		bluetooth_transmit(low);
+		high=ADCH;
+		
+		bluetooth_transmit(channel);
 		bluetooth_transmit(high);
+		bluetooth_transmit(low);
+
+		
+		
+		}
 		//bluetooth_transmit(result);
-		_delay_ms(1000);
-		result=0;*/
+		
+		
     }
 }
 

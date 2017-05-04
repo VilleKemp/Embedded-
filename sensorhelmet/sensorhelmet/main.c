@@ -13,7 +13,7 @@
 #define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
 
 
-#define channels 1 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
+#define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
 //define eeprom instructions
 #define WREN 0b00000110
 #define WRITE 0b00000010
@@ -133,7 +133,7 @@ void send_to_eeprom(char data){
 }
 
 /*Led functions*/
- void blue_led_on(){
+ void green_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND4); // Pin 4 goes low
@@ -146,14 +146,14 @@ void send_to_eeprom(char data){
 	PORTD &= ~(1 << PIND6); // Pin 6 goes low	 
  }
  
-  void green_led_on(){
+  void red_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND6); // Pin 6 goes low
 	PORTD |= (1 << PIND4); // Pin 4 goes high	 
  }
  
-   void red_led_on(){
+   void blue_led_on(){
 	 
 	PORTD &= ~(1 << PIND4); // Pin 4 goes low
 	PORTD &= ~(1 << PIND6); // Pin 6 goes low
@@ -162,6 +162,10 @@ void send_to_eeprom(char data){
 
 
 void blink(){
+		_delay_ms(500);
+	green_led_on();	
+		_delay_ms(500);
+	red_led_on();
 		_delay_ms(500);
 	blue_led_on();
 	_delay_ms(500);

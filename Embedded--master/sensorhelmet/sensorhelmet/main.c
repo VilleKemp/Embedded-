@@ -115,7 +115,7 @@ void send_to_eeprom(char data){
 }
 
 /*Led functions*/
- void blue_led_on(){
+ void green_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND4); // Pin 4 goes low
@@ -128,7 +128,7 @@ void send_to_eeprom(char data){
 	PORTD &= ~(1 << PIND6); // Pin 6 goes low	 
  }
  
-  void green_led_on(){
+  void blue_led_on(){
 	 
 	PORTD &= ~(1 << PIND5); // Pin 5 goes low
 	PORTD &= ~(1 << PIND6); // Pin 6 goes low
@@ -144,7 +144,10 @@ void send_to_eeprom(char data){
 
 
 void blink(){
-		_delay_ms(500);
+	red_led_on(;
+	_delay_ms(500);	
+	green_led_on(;
+	_delay_ms(500);
 	blue_led_on();
 	_delay_ms(500);
 	led_off();
@@ -198,6 +201,8 @@ char *adc_results;
 			blink();
 			newIntFlag = 0;
 		}		
+		
+		
 /*test code for 
 ReceivedByte = bluetooth_receive();
 bluetooth_transmit(ReceivedByte);

@@ -17,8 +17,8 @@
 //define eeprom instructions
 #define WREN 6
 //0b00000110
-#define WRITE 0b00000010
-#define READ 0b00000011
+#define WRITE 2
+#define READ 3
 #define BAUDRATE 9600
 
 #define NOP asm("nop");
@@ -52,7 +52,7 @@ ADCSRA |=(1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); //enable adc ja presc
 
 
 //SPI
-SPCR0 |= (1<<SPE0)|(1<<MSTR0);// SPI enable ja set master
+SPCR0 |= (1<<SPE0)|(1<<MSTR0) | (1<<SPR10);// SPI enable ja set master
 PORTB |= (1 << PINB4); //set CS high as default
 
 
@@ -129,7 +129,7 @@ void sync_eeprom(){
 	
 }
 
-void send_to_eeprom(char data, char location_H, char location_L){
+void send_to_eeprom(char inval, char location_H, char location_L){
 	int i;
 
 	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
@@ -149,12 +149,13 @@ void send_to_eeprom(char data, char location_H, char location_L){
 	// Pin 4 goes low. Chip select	
 	PORTB &= ~(1 << PINB4);
 
+
 	SPDR0 = WRITE;								/* send WRITE opCode */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
 
-	/* send 2-byte address */
+	/* send address */
 	SPDR0 = location_H;							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
@@ -164,8 +165,8 @@ void send_to_eeprom(char data, char location_H, char location_L){
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
-
-	SPDR0 = data;								/* send data */
+	
+	SPDR0 = inval;								/* send data */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
@@ -177,11 +178,11 @@ void send_to_eeprom(char data, char location_H, char location_L){
 
 char read_eeprom(char location_H, char location_L){
 	int i;
-	char data;
+	char outval;
 	/* --- pull CS low --- */
 		PORTB &= ~(1 << PINB4);
 
-	SPDR0 = READ;								/* send WRITE opCode */
+	SPDR0 = READ;								/* send READ opCode */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
@@ -205,12 +206,12 @@ char read_eeprom(char location_H, char location_L){
 	
 
 	/* get returned data = read SPDR */
-	data = SPDR0;
+	outval = SPDR0;
 	
 	/* --- pull CS high ---- */
 	 PORTB |= (1 << PINB4);
-	
-	return data; 
+		
+	return outval; 
 	
 	
 }
@@ -295,9 +296,9 @@ char location_H;
 int channel;
     while (1) 
     {
-		location_L=0x00000;
-		location_H=0x00001;
-	ep="A";
+		location_L=5;
+		location_H=5;
+	ep='A';
 	
 	send_to_eeprom(ep,location_H,location_L);
 	ReceivedByte=read_eeprom(location_H,location_L);

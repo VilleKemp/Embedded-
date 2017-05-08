@@ -15,11 +15,13 @@
 
 #define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
 //define eeprom instructions
-#define WREN 0b00000110
+#define WREN 6
+//0b00000110
 #define WRITE 0b00000010
 #define READ 0b00000011
 #define BAUDRATE 9600
 
+#define NOP asm("nop");
 //uint16_t adc_result[channels]; //pointless. remove later
 char high;
 char low;
@@ -51,6 +53,7 @@ ADCSRA |=(1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); //enable adc ja presc
 
 //SPI
 SPCR0 |= (1<<SPE0)|(1<<MSTR0);// SPI enable ja set master
+PORTB |= (1 << PINB4); //set CS high as default
 
 
 //USART
@@ -116,20 +119,100 @@ char * read_sensors(){
 return results;
 }
 
-void send_to_eeprom(char data){
-	
+void sync_eeprom(){
 	/*synchronization?????*/
-	SPDR0 = data; 
-	while(!(SPSR0 & (1<<SPIF0))){ 
+	SPDR0 = 0xFF;
+	while(!(SPSR0 & (1<<SPIF0))){
+			;
+		}
+		
+	
+}
+
+void send_to_eeprom(char data, char location_H, char location_L){
+	int i;
+
+	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
+	
+	//send WREn
+	SPDR0=WREN;
+	/* Wait for transmission complete */
+	 while(!(SPSR0 & (1<<SPIF0))){;}	
+	 // Pin  goes high Chip select		 
+	 PORTB |= (1 << PINB4); 
+	 //pause
+	 for(i=0;i<1000;i++){
+		 	NOP
+	 	}
+		 
+	sync_eeprom();	 
+	// Pin 4 goes low. Chip select	
+	PORTB &= ~(1 << PINB4);
+
+	SPDR0 = WRITE;								/* send WRITE opCode */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+	;
+	}
+
+	/* send 2-byte address */
+	SPDR0 = location_H;							/* send upper address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+		;
+	}
+
+	SPDR0 = location_L;		 					/* send lower address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+	;
+	}
+
+	SPDR0 = data;								/* send data */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+	;
+	}
+
+	 // Pin  goes high Chip select
+	 PORTB |= (1 << PINB4);
+
+}
+
+char read_eeprom(char location_H, char location_L){
+	int i;
+	char data;
+	/* --- pull CS low --- */
+		PORTB &= ~(1 << PINB4);
+
+	SPDR0 = READ;								/* send WRITE opCode */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+		;
+	}
+
+	/* send 2-byte address */
+	SPDR0 = location_H;							/* send upper address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
 	
-	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
+	SPDR0 = location_L		; 					/* send lower address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+		;
+	}
+
+	/* --- slight pause --- */
+	for(i=0;i<100;i++){
+		NOP
+	}
 	
-	 /* Start transmission */
-	 SPDR0 = data;
-	 /* Wait for transmission complete */
-	 while(!(SPSR0 & (1<<SPIF0))){;}	 PORTB |= (1 << PINB); // Pin  goes high Chip select	
+	
+
+	/* get returned data = read SPDR */
+	data = SPDR0;
+	
+	/* --- pull CS high ---- */
+	 PORTB |= (1 << PINB4);
+	
+	return data; 
+	
+	
 }
 
 /*Led functions*/
@@ -203,33 +286,33 @@ int main(void)
 {
 init();
 sei();
-
+char ep;
 char ReceivedByte;
 uint16_t result;
 char *adc_results;
+char location_L;
+char location_H;
 int channel;
     while (1) 
     {
-		/*
-		adc_results=read_sensors();
-		for(int i=0;i<channels*2;i=i+2){
-		bluetooth_transmit(*(adc_results+i));
-		bluetooth_transmit(*(adc_results+i+1));
-		_delay_ms(1000);
-		}
-		*/
-		
-		
+		location_L=0x00000;
+		location_H=0x00001;
+	ep="A";
+	
+	send_to_eeprom(ep,location_H,location_L);
+	ReceivedByte=read_eeprom(location_H,location_L);
+	
+	if(ReceivedByte!=0){
+	bluetooth_transmit(ReceivedByte);
+	blink();
+	}
 		if (newIntFlag)
 		{
 			blink();
 			newIntFlag = 0;
 		}		
-/*test code for 
-ReceivedByte = bluetooth_receive();
-bluetooth_transmit(ReceivedByte);
-	*/
-//test code for adc
+/*
+//working code for adc
 		for(channel=0;channel<channels;channel++){
         ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));//all muxes to 0
         ADMUX |= channel;
@@ -251,6 +334,7 @@ bluetooth_transmit(ReceivedByte);
 		
 		
 		}
+		*/
 		//bluetooth_transmit(result);
 		
 		

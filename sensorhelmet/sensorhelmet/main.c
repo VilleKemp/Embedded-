@@ -129,9 +129,12 @@ void sync_eeprom(){
 	
 }
 
-void send_to_eeprom(char inval, char location_H, char location_L){
+void send_to_eeprom(char inval, uint8_t location_H,uint8_t location_M, uint8_t location_L){
 	int i;
-
+	 /*pause*/
+	 for(i=0;i<1000;i++){
+		 	NOP
+	 	}
 	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
 	
 	//send WREn
@@ -140,12 +143,12 @@ void send_to_eeprom(char inval, char location_H, char location_L){
 	 while(!(SPSR0 & (1<<SPIF0))){;}	
 	 // Pin  goes high Chip select		 
 	 PORTB |= (1 << PINB4); 
-	 //pause
+	 /*pause*/
 	 for(i=0;i<1000;i++){
 		 	NOP
 	 	}
 		 
-	sync_eeprom();	 
+	
 	// Pin 4 goes low. Chip select	
 	PORTB &= ~(1 << PINB4);
 
@@ -154,18 +157,37 @@ void send_to_eeprom(char inval, char location_H, char location_L){
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
-
+NOP;
+NOP;
+NOP;
+NOP;
 	/* send address */
 	SPDR0 = location_H;							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-
+NOP;
+NOP;
+NOP;
+NOP;
+	SPDR0 = location_M;		 					/* send lower address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+		;
+	}
+NOP;
+NOP;
+NOP;
+NOP;
 	SPDR0 = location_L;		 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
+NOP;
+NOP;
+NOP;
+NOP;	
 	
+
 	SPDR0 = inval;								/* send data */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
@@ -176,37 +198,52 @@ void send_to_eeprom(char inval, char location_H, char location_L){
 
 }
 
-char read_eeprom(char location_H, char location_L){
+char read_eeprom(uint8_t location_H, uint8_t location_M ,uint8_t location_L){
 	int i;
 	char outval;
+	
+	for(i=0;i<100;i++){
+		NOP
+	}
+		
 	/* --- pull CS low --- */
-		PORTB &= ~(1 << PINB4);
+	PORTB &= ~(1 << PINB4);
 
 	SPDR0 = READ;								/* send READ opCode */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-
-	/* send 2-byte address */
+	/*
+	for(i=0;i<10;i++){
+		NOP
+	}
+	*/
+	/* send address */
 	SPDR0 = location_H;							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
+		
+	SPDR0 = location_M;		 					/* send lower address */
+	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
+			;
+		}
+
 	
 	SPDR0 = location_L		; 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
 
-	/* --- slight pause --- */
+	// --- slight pause --- 
 	for(i=0;i<100;i++){
 		NOP
 	}
-	
-	
+sync_eeprom();	
 
 	/* get returned data = read SPDR */
 	outval = SPDR0;
+	
 	
 	/* --- pull CS high ---- */
 	 PORTB |= (1 << PINB4);
@@ -291,17 +328,19 @@ char ep;
 char ReceivedByte;
 uint16_t result;
 char *adc_results;
-char location_L;
-char location_H;
+uint8_t location_L;
+uint8_t location_M;
+uint8_t location_H;
 int channel;
     while (1) 
     {
-		location_L=5;
-		location_H=5;
-	ep='A';
+		location_L=0b00000011;
+		location_M = 0b00000011;
+		location_H =0b00000000;
+		ep=0b11110000;
 	
-	send_to_eeprom(ep,location_H,location_L);
-	ReceivedByte=read_eeprom(location_H,location_L);
+	send_to_eeprom(ep,location_H,location_M,location_L);
+	ReceivedByte=read_eeprom(location_H,location_M,location_L);
 	
 	if(ReceivedByte!=0){
 	bluetooth_transmit(ReceivedByte);

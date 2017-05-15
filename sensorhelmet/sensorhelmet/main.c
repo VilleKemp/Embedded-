@@ -11,23 +11,23 @@
 
 #define USART_BAUDRATE 9600
 #define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
-
+//largest memoryaddress in the external eeprom
 #define MEMORY_RANGE 0x0001FFFF
 #define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
 //define eeprom instructions
 #define WREN 6
-//0b00000110
 #define WRITE 2
 #define READ 3
 #define BAUDRATE 9600
-
+//no operation used in SPI
 #define NOP asm("nop");
-//uint16_t adc_result[channels]; //pointless. remove later
+/*
 char high;
 char low;
-
+*/
 //Interrupt flag
 static volatile uint8_t newIntFlag = 0;
+static volatile uint8_t full_flag = 0;
 
 
 void init(){
@@ -86,36 +86,7 @@ uint16_t read_sensor(int channel){
 	
 		return result;
 }
-//WIP might not be user
-char * read_sensors(char * results[channels*2]){
-	int channel=0;
-	int position;
-	position=0;
-	        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
-	//static	char results[channels*2];//holds values for one loop of read_sensors()
-	for(channel=0;channel<channels;channel++)
-    {
-        // This is the code that selects the channel. AND out the entire mux area,
-        // then OR in the desired analog channel.
-        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
-        ADMUX |= channel;
 
-        // Start the conversion.
-        ADCSRA |= (1<<ADSC);
-
-        // Wait for the result, then read it.
-        while(ADCSRA & (1<<ADSC));
-        //adc_result[channel] =ADC;
-		//high=ADCH;
-		//low=ADCL;
-		results[position]=ADCH;
-		results[position+1]=ADCL;
-		position=position+2;
-		
-}
-        //ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
-return results;
-}
 
 //Sends a dummy byte to eeprom
 void sync_eeprom(){
@@ -311,10 +282,34 @@ char bluetooth_receive(){
 	return ReceivedByte;
 }
 
+void send_all_data(uint32_t memory_address){
+				uint32_t j;
+				char ReceivedByte;
+				blue_led_on();
+				bluetooth_transmit(0x53);//S
+				bluetooth_transmit(0x54);//T
+				bluetooth_transmit(0x41);//A
+				bluetooth_transmit(0x52);//R
+				bluetooth_transmit(0x54);//T
+				
+				for(j=memory_address-100;j<memory_address;j++){
+					ReceivedByte=read_eeprom(j);
+					bluetooth_transmit(ReceivedByte);
+				}
+				
+				bluetooth_transmit(0x45);//E
+				bluetooth_transmit(0x4e);//N
+				bluetooth_transmit(0x44);//D
+				led_off();
+				newIntFlag = 0;
+	
+}
+
 /*Interrupts*/
 //Sync button interrupt
 ISR(PCINT3_vect)
 {
+	
 	newIntFlag = 1;
 }
 
@@ -323,8 +318,9 @@ int main(void)
 {
 init();
 sei();
-char ep;
-char ReceivedByte;
+blink();
+
+
 
 uint32_t j;
 char high;
@@ -338,6 +334,7 @@ int channel;
 	//loop through all the channels and write the sensor readings to the eeprom		
 	for(channel=0;channel<channels;channel++){
 		sensor_result=read_sensor(channel);
+		//parses the 16 bit sensor result to two 8 bit results for transfer purposes
 		low = sensor_result & 0xFF;
 		high = sensor_result >> 8;
 	if((memory_address + 2) < 0x0001FFFF){
@@ -348,59 +345,27 @@ int channel;
 	}
 		}
 
-	/*functioning test code with the old eeprom functions
-			location_L=0b00000011;
-		location_M = 0b00000011;
-		location_H =0b00000000;
-		ep=0b11110000;
-	send_to_eeprom(ep,location_H,location_M,location_L);
-	ReceivedByte=read_eeprom(location_H,location_M,location_L);
-	
-	if(ReceivedByte!=0){
-	bluetooth_transmit(ReceivedByte);
-	blink();
-	}
-	*/
+	//when button is pressed sends data from eeprom via bluetooth 
 	if (newIntFlag)
 		{
-			blue_led_on();
-			for(j=memory_address-100;j<memory_address;j++){
-			ReceivedByte=read_eeprom(j);
-			bluetooth_transmit(ReceivedByte);
-			}
-			led_off();
-			newIntFlag = 0;
-		}		
-	if (memory_address >0x0001FFFF)
+send_all_data(memory_address);
+		}
+	//resets the memory address when eeproms last memory address is reached		
+	if (memory_address >=MEMORY_RANGE-1)
 		{
-			memory_address=0;
+			full_flag=1;
+			red_led_on();
+			while(full_flag==1){
+				if (newIntFlag)
+				{
+					send_all_data(memory_address);
+					full_flag=0;
+					memory_address=0x00000000;
+				}
+				
+			}
 		}
-/*
-//working code for adc
-		for(channel=0;channel<channels;channel++){
-        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));//all muxes to 0
-        ADMUX |= channel;
-	  // Start the conversion.
-        ADCSRA |= (1<<ADSC);
 
-        // Wait for the result, then read it.
-
-        
-		while(ADCSRA & (1<<ADSC));
-       // result =ADC;
-		low=ADCL;
-		high=ADCH;
-		
-		bluetooth_transmit(channel);
-		bluetooth_transmit(high);
-		bluetooth_transmit(low);
-
-		
-		
-		}
-	*/	
-		//bluetooth_transmit(result);
-		
 		
     }
 }

@@ -12,7 +12,7 @@
 #define USART_BAUDRATE 9600
 #define BAUD_PRESCALE (((F_CPU / (USART_BAUDRATE * 16UL))) - 1)
 
-
+#define MEMORY_RANGE 0x0001FFFF
 #define channels 4 // käy läpi vain flexiforcet. jos nostetaan 6 niin lukee myös kiihtyvyysanturin
 //define eeprom instructions
 #define WREN 6
@@ -48,11 +48,12 @@ MCUCR = (0<<JTD)|(1<<PUD);
 //ADC
 //ADMUX biteillä 0-4 valitaan mistä ADC pinnistä luetaan tietoa
 ADMUX |=(1<<REFS0) | (1<<ADLAR);// aseta AREF referenssi jänniteeksi ja älä left adjusti
-ADCSRA |=(1<<ADEN) | (1<<ADPS2) | (1<<ADPS1) | (1<<ADPS0); //enable adc ja prescaler asetettu 128. Taajuuden pitää olla välillä 50k-200k. 128 arvo on 156k 20MHz MCU taajuudella
+ADCSRA |=(1<<ADEN) | (0<<ADPS2) | (0<<ADPS1) | (0<<ADPS0); //enable adc ja prescaler asetettu 128. Taajuuden pitää olla välillä 50k-200k. 128 arvo on 156k 20MHz MCU taajuudella
 
 
 //SPI
-SPCR0 |= (1<<SPE0)|(1<<MSTR0) | (1<<SPR10);// SPI enable ja set master
+SPCR0 |= (1<<SPE0)|(1<<MSTR0) | (0<<SPR10) | (0<<SPR00);// SPI enable ja set master. 
+SPSR0 |= (1<<SPI2X0);
 PORTB |= (1 << PINB4); //set CS high as default
 
 
@@ -69,9 +70,9 @@ OSCCAL = 0xC1;
 PCMSK3 = 0b00000100;
 PCICR = 0b00001000;
 }
-
-char * read_sensor(int channel){
-		static char result[2];
+//Returns a uint_16 value containing the sensor result
+uint16_t read_sensor(int channel){
+		uint16_t result;
         ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
         ADMUX |= channel;
 
@@ -80,21 +81,18 @@ char * read_sensor(int channel){
 
         // Wait for the result, then read it.
         while(ADCSRA & (1<<ADSC));
-        //adc_result[channel] =ADC;
-        //high=ADCH;
-        //low=ADCL;
-        result[0]=ADCH;
-        result[1]=ADCL;	
+        result =ADC;
+        	
 	
 		return result;
 }
-
-char * read_sensors(){
+//WIP might not be user
+char * read_sensors(char * results[channels*2]){
 	int channel=0;
 	int position;
 	position=0;
 	        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
-	static	char results[channels*2];//holds values for one loop of read_sensors()
+	//static	char results[channels*2];//holds values for one loop of read_sensors()
 	for(channel=0;channel<channels;channel++)
     {
         // This is the code that selects the channel. AND out the entire mux area,
@@ -115,10 +113,11 @@ char * read_sensors(){
 		position=position+2;
 		
 }
-        ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
+        //ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
 return results;
 }
 
+//Sends a dummy byte to eeprom
 void sync_eeprom(){
 	/*synchronization?????*/
 	SPDR0 = 0xFF;
@@ -128,8 +127,8 @@ void sync_eeprom(){
 		
 	
 }
-
-void send_to_eeprom(char inval, uint8_t location_H,uint8_t location_M, uint8_t location_L){
+//sends inval to eeprom.
+void send_to_eeprom(char inval, uint32_t memory_address){
 	int i;
 	 /*pause*/
 	 for(i=0;i<1000;i++){
@@ -162,7 +161,7 @@ NOP;
 NOP;
 NOP;
 	/* send address */
-	SPDR0 = location_H;							/* send upper address */
+	SPDR0 = (memory_address & 0x00ff0000);							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
@@ -170,7 +169,7 @@ NOP;
 NOP;
 NOP;
 NOP;
-	SPDR0 = location_M;		 					/* send lower address */
+	SPDR0 = (memory_address & 0x0000ff00);		 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
@@ -178,7 +177,7 @@ NOP;
 NOP;
 NOP;
 NOP;
-	SPDR0 = location_L;		 					/* send lower address */
+	SPDR0 = (memory_address & 0x000000ff);		 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
@@ -198,7 +197,7 @@ NOP;
 
 }
 
-char read_eeprom(uint8_t location_H, uint8_t location_M ,uint8_t location_L){
+char read_eeprom(uint32_t memory_address){
 	int i;
 	char outval;
 	
@@ -219,18 +218,18 @@ char read_eeprom(uint8_t location_H, uint8_t location_M ,uint8_t location_L){
 	}
 	*/
 	/* send address */
-	SPDR0 = location_H;							/* send upper address */
+	SPDR0 = (memory_address & 0x00ff0000);							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
 		
-	SPDR0 = location_M;		 					/* send lower address */
+	SPDR0 = (memory_address & 0x0000ff00);		 					/* send middle address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 			;
 		}
 
 	
-	SPDR0 = location_L		; 					/* send lower address */
+	SPDR0 = (memory_address & 0x000000ff)		; 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
@@ -281,7 +280,7 @@ sync_eeprom();
 	PORTD |= (1 << PIND5); // Pin 5 goes high	 
  }
 
-
+//test function that blinks all the leds once
 void blink(){
 		_delay_ms(500);
 	green_led_on();	
@@ -301,7 +300,7 @@ void bluetooth_transmit(char data){
 		}; // Do nothing until UDR is ready for more data to be written to it
 		
 		
-		UDR0 = data; // Echo back the received byte back to the computer	
+		UDR0 = data; // Send data	
 
 }
 
@@ -326,19 +325,34 @@ init();
 sei();
 char ep;
 char ReceivedByte;
-uint16_t result;
-char *adc_results;
-uint8_t location_L;
-uint8_t location_M;
-uint8_t location_H;
+
+uint32_t j;
+char high;
+char low;
+uint16_t sensor_result;
+uint32_t memory_address=0x00000000;
 int channel;
     while (1) 
     {
-		location_L=0b00000011;
+		green_led_on();
+	//loop through all the channels and write the sensor readings to the eeprom		
+	for(channel=0;channel<channels;channel++){
+		sensor_result=read_sensor(channel);
+		low = sensor_result & 0xFF;
+		high = sensor_result >> 8;
+	if((memory_address + 2) < 0x0001FFFF){
+		send_to_eeprom(low,memory_address);
+		memory_address=memory_address+1;
+		send_to_eeprom(high,memory_address);
+		memory_address=memory_address+1;	
+	}
+		}
+
+	/*functioning test code with the old eeprom functions
+			location_L=0b00000011;
 		location_M = 0b00000011;
 		location_H =0b00000000;
 		ep=0b11110000;
-	
 	send_to_eeprom(ep,location_H,location_M,location_L);
 	ReceivedByte=read_eeprom(location_H,location_M,location_L);
 	
@@ -346,11 +360,21 @@ int channel;
 	bluetooth_transmit(ReceivedByte);
 	blink();
 	}
-		if (newIntFlag)
+	*/
+	if (newIntFlag)
 		{
-			blink();
+			blue_led_on();
+			for(j=memory_address-100;j<memory_address;j++){
+			ReceivedByte=read_eeprom(j);
+			bluetooth_transmit(ReceivedByte);
+			}
+			led_off();
 			newIntFlag = 0;
 		}		
+	if (memory_address >0x0001FFFF)
+		{
+			memory_address=0;
+		}
 /*
 //working code for adc
 		for(channel=0;channel<channels;channel++){
@@ -374,7 +398,7 @@ int channel;
 		
 		
 		}
-		*/
+	*/	
 		//bluetooth_transmit(result);
 		
 		

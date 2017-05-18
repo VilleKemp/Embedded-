@@ -28,6 +28,12 @@ char low;
 //Interrupt flag
 static volatile uint8_t newIntFlag = 0;
 static volatile uint8_t full_flag = 0;
+//timer interrupt variables
+uint16_t sensor_result;
+uint32_t memory_address=0x00000000;
+int channel;
+char high;
+char low;
 
 
 void init(){
@@ -69,6 +75,16 @@ OSCCAL = 0xC1;
 //Enable button interrupts
 PCMSK3 = 0b00000100;
 PCICR = 0b00001000;
+
+//timer
+TCCR1B |= (1<<CS10) | (1<<CS12); //1024 prescaler
+TCCR1A |=  (1<<WGM12); // CTC	on
+TCNT1 = 0; //init timer to 0
+TIMSK1 |= (1<< OCIE1A); //enable compare with OCR1A
+OCR1A = 800; //Required steps until 100 ms is reached using 64 prescaler (0.001/(1/(8000000/64))-1 ) (required delay/clock time period )-1
+
+//sets memory address to 0 on startup
+memory_address=0x00000000;
 }
 //Returns a uint_16 value containing the sensor result
 uint16_t read_sensor(int channel){
@@ -311,48 +327,58 @@ ISR(PCINT3_vect)
 {
 	
 	newIntFlag = 1;
+	
+}
+
+//timer interrupt
+ISR (TIMER1_COMPA_vect)
+{
+	
+	//loop through all the channels and write the sensor readings to the eeprom
+	for(channel=0;channel<channels;channel++){
+		sensor_result=read_sensor(channel);
+		//parses the 16 bit sensor result to two 8 bit results for transfer purposes
+		low = sensor_result & 0xFF;
+		high = sensor_result >> 8;
+		if((memory_address + 2) < 0x0001FFFF){
+			send_to_eeprom(low,memory_address);
+			memory_address=memory_address+1;
+			send_to_eeprom(high,memory_address);
+			memory_address=memory_address+1;
+		}
+	}
+	
 }
 
 
 int main(void)
 {
 init();
-sei();
 blink();
-
-
+sei();
 
 uint32_t j;
-char high;
-char low;
-uint16_t sensor_result;
-uint32_t memory_address=0x00000000;
-int channel;
+
+
     while (1) 
     {
 		green_led_on();
-	//loop through all the channels and write the sensor readings to the eeprom		
-	for(channel=0;channel<channels;channel++){
-		sensor_result=read_sensor(channel);
-		//parses the 16 bit sensor result to two 8 bit results for transfer purposes
-		low = sensor_result & 0xFF;
-		high = sensor_result >> 8;
-	if((memory_address + 2) < 0x0001FFFF){
-		send_to_eeprom(low,memory_address);
-		memory_address=memory_address+1;
-		send_to_eeprom(high,memory_address);
-		memory_address=memory_address+1;	
-	}
-		}
+
 
 	//when button is pressed sends data from eeprom via bluetooth 
 	if (newIntFlag)
 		{
-send_all_data(memory_address);
+			TIMSK1 &= ~(1<< OCIE1A);
+//cli();
+			send_all_data(memory_address);
+		//sei();
+			TIMSK1 |= (1<< OCIE1A);
 		}
 	//resets the memory address when eeproms last memory address is reached		
 	if (memory_address >=MEMORY_RANGE-1)
-		{
+	{
+		
+			TIMSK1 &= ~(1<< OCIE1A); //disable timer compare interrupt becouse eeprom is full and we shouldn't write anymore
 			full_flag=1;
 			red_led_on();
 			while(full_flag==1){
@@ -361,6 +387,7 @@ send_all_data(memory_address);
 					send_all_data(memory_address);
 					full_flag=0;
 					memory_address=0x00000000;
+					TIMSK1 |= (1<< OCIE1A);//enable timer compare interrupts
 				}
 				
 			}
@@ -370,3 +397,4 @@ send_all_data(memory_address);
     }
 }
 
+//1/(n+1)

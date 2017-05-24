@@ -30,7 +30,7 @@ static volatile uint8_t newIntFlag = 0;
 static volatile uint8_t full_flag = 0;
 //timer interrupt variables
 uint16_t sensor_result;
-uint32_t memory_address=0x00000000;
+static volatile uint32_t memory_address=0x00000000;
 int channel;
 char high;
 char low;
@@ -54,18 +54,18 @@ MCUCR = (0<<JTD)|(1<<PUD);
 //ADC
 //ADMUX biteillä 0-4 valitaan mistä ADC pinnistä luetaan tietoa
 ADMUX |=(1<<REFS0) | (1<<ADLAR);// aseta AREF referenssi jänniteeksi ja älä left adjusti
-ADCSRA |=(1<<ADEN) | (0<<ADPS2) | (0<<ADPS1) | (0<<ADPS0); //enable adc ja prescaler asetettu 128. Taajuuden pitää olla välillä 50k-200k. 128 arvo on 156k 20MHz MCU taajuudella
+ADCSRA |=(1<<ADEN);// | (0<<ADPS2) | (0<<ADPS1) | (0<<ADPS0); //enable adc ja prescaler asetettu 128. Taajuuden pitää olla välillä 50k-200k. 128 arvo on 156k 20MHz MCU taajuudella
 
 
 //SPI
-SPCR0 |= (1<<SPE0)|(1<<MSTR0) | (0<<SPR10) | (0<<SPR00);// SPI enable ja set master. 
+SPCR0 |= (1<<SPE0)|(1<<MSTR0);// | (0<<SPR10) | (0<<SPR00);// SPI enable ja set master. 
 SPSR0 |= (1<<SPI2X0);
 PORTB |= (1 << PINB4); //set CS high as default
 
 
 //USART
 UCSR0B |= (1 << RXEN0) | (1 << TXEN0);   // Turn on the transmission and reception circuitry
-UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01) | (0<<UMSEL00) | (0<<UMSEL01); // Use 8-bit character sizes
+UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01);// | (0<<UMSEL00) | (0<<UMSEL01); // Use 8-bit character sizes
 
 UBRR0L = BAUD_PRESCALE; // Load lower 8-bits of the baud rate value into the low byte of the UBRR register
 UBRR0H = (BAUD_PRESCALE >> 8); // Load upper 8-bits of the baud rate value into the high byte of the UBRR register
@@ -77,11 +77,11 @@ PCMSK3 = 0b00000100;
 PCICR = 0b00001000;
 
 //timer
-TCCR1B |= (1<<CS10) | (1<<CS12); //1024 prescaler
+TCCR1B |= (1<<CS12) |(1<<CS10); // prescaler. 1024 should be the right value but it runs too slow
 TCCR1A |=  (1<<WGM12); // CTC	on
 TCNT1 = 0; //init timer to 0
 TIMSK1 |= (1<< OCIE1A); //enable compare with OCR1A
-OCR1A = 800; //Required steps until 100 ms is reached using 64 prescaler (0.001/(1/(8000000/64))-1 ) (required delay/clock time period )-1
+OCR1A = 800; //Required steps until 100 ms is reached using 1024 prescaler (0.001/(1/(8000000/1024))-1 ) (required delay/clock time period )-1
 
 //sets memory address to 0 on startup
 memory_address=0x00000000;
@@ -304,18 +304,18 @@ void send_all_data(uint32_t memory_address){
 				blue_led_on();
 				bluetooth_transmit(0x53);//S
 				bluetooth_transmit(0x54);//T
-				bluetooth_transmit(0x41);//A
-				bluetooth_transmit(0x52);//R
-				bluetooth_transmit(0x54);//T
+		//		bluetooth_transmit(0x41);//A
+	//			bluetooth_transmit(0x52);//R
+//				bluetooth_transmit(0x54);//T
 				
-				for(j=memory_address-100;j<memory_address;j++){
+				for(j=0;j<memory_address;j=j+1){
 					ReceivedByte=read_eeprom(j);
 					bluetooth_transmit(ReceivedByte);
 				}
 				
 				bluetooth_transmit(0x45);//E
 				bluetooth_transmit(0x4e);//N
-				bluetooth_transmit(0x44);//D
+	//			bluetooth_transmit(0x44);//D
 				led_off();
 				newIntFlag = 0;
 	
@@ -331,6 +331,7 @@ ISR(PCINT3_vect)
 }
 
 //timer interrupt
+
 ISR (TIMER1_COMPA_vect)
 {
 	
@@ -341,15 +342,39 @@ ISR (TIMER1_COMPA_vect)
 		low = sensor_result & 0xFF;
 		high = sensor_result >> 8;
 		if((memory_address + 2) < 0x0001FFFF){
-			send_to_eeprom(low,memory_address);
-			memory_address=memory_address+1;
 			send_to_eeprom(high,memory_address);
+			memory_address=memory_address+1;
+			send_to_eeprom(low,memory_address);
 			memory_address=memory_address+1;
 		}
 	}
+	//shouldn't be necessary
+	TCNT1 = 0;
+	
 	
 }
 
+
+/*/test
+ISR (TIMER1_COMPA_vect)
+{
+	
+	
+	
+		sensor_result=read_sensor(channels);
+		//parses the 16 bit sensor result to two 8 bit results for transfer purposes
+		low = sensor_result & 0xFF;
+		high = sensor_result >> 8;
+		
+		send_to_eeprom(low,memory_address);
+		memory_address=memory_address+1;
+		send_to_eeprom(high,memory_address);
+		memory_address=memory_address+1;
+		
+	
+	
+}
+*/
 
 int main(void)
 {
@@ -357,19 +382,15 @@ init();
 blink();
 sei();
 
-uint32_t j;
-
-
     while (1) 
     {
 		green_led_on();
-
 
 	//when button is pressed sends data from eeprom via bluetooth 
 	if (newIntFlag)
 		{
 			TIMSK1 &= ~(1<< OCIE1A);
-//cli();
+//		cli();
 			send_all_data(memory_address);
 		//sei();
 			TIMSK1 |= (1<< OCIE1A);
@@ -396,5 +417,3 @@ uint32_t j;
 		
     }
 }
-
-//1/(n+1)

@@ -30,10 +30,18 @@ static volatile uint8_t newIntFlag = 0;
 static volatile uint8_t full_flag = 0;
 //timer interrupt variables
 uint16_t sensor_result;
-static volatile uint32_t memory_address=0x00000000;
+static volatile uint32_t memory_address;
+uint32_t address;
 int channel;
 char high;
 char low;
+
+uint8_t h_add;
+uint8_t m_add;
+uint8_t l_add;
+
+static volatile uint32_t j ;
+char test;
 
 
 void init(){
@@ -58,8 +66,8 @@ ADCSRA |=(1<<ADEN);// | (0<<ADPS2) | (0<<ADPS1) | (0<<ADPS0); //enable adc ja pr
 
 
 //SPI
-SPCR0 |= (1<<SPE0)|(1<<MSTR0);// | (0<<SPR10) | (0<<SPR00);// SPI enable ja set master. 
-SPSR0 |= (1<<SPI2X0);
+SPCR0 |= (1<<SPE0)|(1<<MSTR0) | (1<<SPR00);// SPI enable ja set master. clock 
+//SPSR0 |= (1<<SPI2X0);
 PORTB |= (1 << PINB4); //set CS high as default
 
 
@@ -91,10 +99,8 @@ uint16_t read_sensor(int channel){
 		uint16_t result;
         ADMUX &= ~((1<<MUX3) | (1<<MUX2) | (1<<MUX1) | (1<<MUX0));
         ADMUX |= channel;
-
         // Start the conversion.
         ADCSRA |= (1<<ADSC);
-
         // Wait for the result, then read it.
         while(ADCSRA & (1<<ADSC));
         result =ADC;
@@ -107,7 +113,7 @@ uint16_t read_sensor(int channel){
 //Sends a dummy byte to eeprom
 void sync_eeprom(){
 	/*synchronization?????*/
-	SPDR0 = 0xFF;
+	SPDR0 = 0x00;
 	while(!(SPSR0 & (1<<SPIF0))){
 			;
 		}
@@ -117,11 +123,22 @@ void sync_eeprom(){
 //sends inval to eeprom.
 void send_to_eeprom(char inval, uint32_t memory_address){
 	int i;
-	 /*pause*/
-	 for(i=0;i<1000;i++){
+	h_add = (memory_address & 0x00ff0000) >> 16 ;
+	m_add = (memory_address & 0x0000ff00) >> 8;
+	l_add = memory_address & 0x000000ff;
+
+	//without this nop the eeprom only writes every 4th value to memory	 
+		 for(i=0;i<5000;i++){
+			 NOP
+		 } 
+	 
+	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
+
+/*pause*/
+	 for(i=0;i<100;i++){
 		 	NOP
 	 	}
-	PORTB &= ~(1 << PINB4); // Pin 4 goes low. Chip select
+	
 	
 	//send WREn
 	SPDR0=WREN;
@@ -129,8 +146,9 @@ void send_to_eeprom(char inval, uint32_t memory_address){
 	 while(!(SPSR0 & (1<<SPIF0))){;}	
 	 // Pin  goes high Chip select		 
 	 PORTB |= (1 << PINB4); 
+	 
 	 /*pause*/
-	 for(i=0;i<1000;i++){
+	 for(i=0;i<100;i++){
 		 	NOP
 	 	}
 		 
@@ -143,37 +161,22 @@ void send_to_eeprom(char inval, uint32_t memory_address){
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
-NOP;
-NOP;
-NOP;
-NOP;
+
 	/* send address */
-	SPDR0 = (memory_address & 0x00ff0000);							/* send upper address */
+	SPDR0 = h_add;							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-NOP;
-NOP;
-NOP;
-NOP;
-	SPDR0 = (memory_address & 0x0000ff00);		 					/* send lower address */
+	
+	SPDR0 = m_add;		 					/* send middle address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-NOP;
-NOP;
-NOP;
-NOP;
-	SPDR0 = (memory_address & 0x000000ff);		 					/* send lower address */
+	SPDR0 = l_add;		 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
 	}
-NOP;
-NOP;
-NOP;
-NOP;	
 	
-
 	SPDR0 = inval;								/* send data */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 	;
@@ -187,6 +190,9 @@ NOP;
 char read_eeprom(uint32_t memory_address){
 	int i;
 	char outval;
+	h_add = (memory_address & 0x00ff0000) >> 16 ;
+	m_add = (memory_address & 0x0000ff00) >> 8;
+	l_add = memory_address & 0x000000ff;
 	
 	for(i=0;i<100;i++){
 		NOP
@@ -199,24 +205,26 @@ char read_eeprom(uint32_t memory_address){
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-	/*
-	for(i=0;i<10;i++){
+	/*not in the example
+	for(i=0;i<100;i++){
 		NOP
 	}
 	*/
+
+	
 	/* send address */
-	SPDR0 = (memory_address & 0x00ff0000);							/* send upper address */
+	SPDR0 = h_add;							/* send upper address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
-		
-	SPDR0 = (memory_address & 0x0000ff00);		 					/* send middle address */
+	
+	SPDR0 = m_add;		 					/* send middle address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 			;
 		}
 
-	
-	SPDR0 = (memory_address & 0x000000ff)		; 					/* send lower address */
+
+	SPDR0 = l_add		; 					/* send lower address */
 	while(!(SPSR0 & (1<<SPIF0))){					/* Wait for transmission complete */
 		;
 	}
@@ -299,7 +307,10 @@ char bluetooth_receive(){
 }
 
 void send_all_data(uint32_t memory_address){
-				uint32_t j;
+				//should be pointless. 
+				uint32_t value;
+				value=0x000000;
+				
 				char ReceivedByte;
 				blue_led_on();
 				bluetooth_transmit(0x53);//S
@@ -309,8 +320,9 @@ void send_all_data(uint32_t memory_address){
 //				bluetooth_transmit(0x54);//T
 				
 				for(j=0;j<memory_address;j=j+1){
-					ReceivedByte=read_eeprom(j);
+					ReceivedByte=read_eeprom(value);
 					bluetooth_transmit(ReceivedByte);
+					value=value+1;
 				}
 				
 				bluetooth_transmit(0x45);//E
@@ -325,7 +337,7 @@ void send_all_data(uint32_t memory_address){
 //Sync button interrupt
 ISR(PCINT3_vect)
 {
-	
+	//To avoid button bouncing interrupt sets the variable to one. Variable is later polled at while loop.
 	newIntFlag = 1;
 	
 }
@@ -334,21 +346,23 @@ ISR(PCINT3_vect)
 
 ISR (TIMER1_COMPA_vect)
 {
-	
+	//test='J';
 	//loop through all the channels and write the sensor readings to the eeprom
-	for(channel=0;channel<channels;channel++){
+	for(channel=0;channel<channels;channel=channel+1){
 		sensor_result=read_sensor(channel);
 		//parses the 16 bit sensor result to two 8 bit results for transfer purposes
 		low = sensor_result & 0xFF;
 		high = sensor_result >> 8;
-		if((memory_address + 2) < 0x0001FFFF){
-			send_to_eeprom(high,memory_address);
+		send_to_eeprom(high,memory_address);
+		memory_address=memory_address+1;
+		send_to_eeprom(low,memory_address);
+		memory_address=memory_address+1;
+/*
+			send_to_eeprom(test,memory_address);
 			memory_address=memory_address+1;
-			send_to_eeprom(low,memory_address);
-			memory_address=memory_address+1;
-		}
+	*/	
 	}
-	//shouldn't be necessary
+	//set counter to zero
 	TCNT1 = 0;
 	
 	
@@ -382,9 +396,10 @@ init();
 blink();
 sei();
 
+
     while (1) 
     {
-		green_led_on();
+			green_led_on();
 
 	//when button is pressed sends data from eeprom via bluetooth 
 	if (newIntFlag)
@@ -392,6 +407,7 @@ sei();
 			TIMSK1 &= ~(1<< OCIE1A);
 //		cli();
 			send_all_data(memory_address);
+			
 		//sei();
 			TIMSK1 |= (1<< OCIE1A);
 		}

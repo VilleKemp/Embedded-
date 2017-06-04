@@ -320,9 +320,10 @@ sei();
 	if (memory_address >=MEMORY_RANGE-1)
 	{
 			TIMSK1 &= ~(1<< OCIE1A); //disable timer compare interrupt becouse eeprom is full and we shouldn't write anymore
-			red_led_on();
+
 			//infinite loop when memory is full. Data can still be sent duing this but only way to continue writing is to reset the system
 			while(1){
+				red_led_on();
 				if (newIntFlag)
 				{
 					send_all_data(memory_address);
